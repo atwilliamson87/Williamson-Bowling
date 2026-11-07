@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Williamson Family Bowling</title>
+<link rel="icon" href="logo.png">
+<style>
+  :root {
+    --bg: #eef1f7; --card: #ffffff; --ink: #0f1d3a; --muted: #5b6478;
+    --line: #dde2ec; --accent: #d1121c; --accent-soft: #fde2e3;
+    --strike: #d1121c; --spare: #1e3a8a; --gold: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1328; --card: #13203f; --ink: #eef0f4; --muted: #9aa6bf;
+      --line: #24345c; --accent: #ef3340; --accent-soft: #3a1418;
+      --strike: #ff5a63; --spare: #93c5fd; --gold: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; margin-bottom: 20px; }
+  .logo { width: 220px; max-width: 60vw; height: auto; display: block; filter: drop-shadow(0 6px 14px rgba(15,29,58,.25)); }
+  h1 { margin: 0; font-size: 1.8rem; letter-spacing: -0.02em; }
+  .rules { color: var(--muted); font-size: 0.9rem; margin-top: 4px; }
+  .rules b { color: var(--ink); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  form.add { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1; min-width: 0; padding: 10px 12px; font: inherit; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+  }
+  button {
+    font: inherit; font-weight: 600; padding: 10px 16px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  }
+  button.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+  button.icon { padding: 4px 8px; background: transparent; border: none; color: var(--muted); font-size: 1.1rem; }
+  button.icon:hover { color: var(--accent); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 560px; }
+  th, td { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--line); }
+  th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; }
+  td.name { text-align: left; font-weight: 600; white-space: nowrap; }
+  td.name input { width: 120px; padding: 6px 8px; font-weight: 600; }
+  td.total { font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+  tr.leader td.total { color: var(--gold); }
+  select {
+    font: inherit; font-weight: 600; width: 64px; padding: 6px 4px; text-align: center;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  }
+  select.strike { color: var(--strike); border-color: var(--strike); }
+  select.spare { color: var(--spare); border-color: var(--spare); }
+  .empty { color: var(--muted); text-align: center; padding: 24px 0; }
+  .standings { list-style: none; margin: 0; padding: 0; }
+  .standings li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .standings li:last-child { border-bottom: none; }
+  .standings .rank { color: var(--muted); width: 2em; display: inline-block; }
+  .standings .pts { font-weight: 700; font-variant-numeric: tabular-nums; }
+  .standings li:first-child .pts { color: var(--gold); }
+  .meta { color: var(--muted); font-size: 0.85rem; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img class="logo" src="logo.png" alt="Williamson Family Bowling">
+    <div>
+      <h1 hidden>Williamson Family Bowling</h1>
+      <div class="rules">6 rounds · 5 pins · <b>Spare = 8</b> · <b>Strike = 10</b> · otherwise 1 point per pin</div>
+    </div>
+    <div class="actions">
+      <button class="ghost" id="newGame" type="button">New game</button>
+      <button class="ghost" id="clearAll" type="button">Clear everything</button>
+    </div>
+  </header>
+
+  <section class="card">
+    <form class="add" id="addForm">
+      <label for="playerName" class="sr-only" hidden>Player name</label>
+      <input type="text" id="playerName" placeholder="Add a player…" maxlength="20" autocomplete="off">
+      <button type="submit">Add</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <div class="table-wrap">
+      <table>
+        <thead id="thead"></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="empty">Add a player to get started.</div>
+  </section>
+
+  <section class="card" id="standingsCard" hidden>
+    <h2>Standings</h2>
+    <ol class="standings" id="standings"></ol>
+  </section>
+</main>
+
+<script>
+  const ROUNDS = 6;
+  const PINS = 5;
+  const SPARE = 8;
+  const STRIKE = 10;
+  const KEY = 'family-bowling-v1';
+
+  // A round value is "" (not bowled), 0–4 (pins), "/" (spare) or "X" (strike)
+  const points = v => v === 'X' ? STRIKE : v === '/' ? SPARE : v === '' ? 0 : Number(v);
+
+  let state = load() || { players: [] };
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch {}
+  }
+  const total = p => p.rounds.reduce((s, v) => s + points(v), 0);
+
+  function render() {
+    const thead = document.getElementById('thead');
+    const tbody = document.getElementById('tbody');
+    const hasPlayers = state.players.length > 0;
+    document.getElementById('empty').hidden = hasPlayers;
+    document.querySelector('table').hidden = !hasPlayers;
+    document.getElementById('standingsCard').hidden = !hasPlayers;
+
+    thead.innerHTML = '<tr><th style="text-align:left">Player</th>' +
+      Array.from({ length: ROUNDS }, (_, i) => `<th>R${i + 1}</th>`).join('') +
+      '<th>Total</th><th></th></tr>';
+
+    const best = Math.max(0, ...state.players.map(total));
+    tbody.innerHTML = '';
+    state.players.forEach((p, pi) => {
+      const tr = document.createElement('tr');
+      const t = total(p);
+      if (t > 0 && t === best) tr.className = 'leader';
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'name';
+      const nameIn = document.createElement('input');
+      nameIn.type = 'text'; nameIn.value = p.name; nameIn.maxLength = 20;
+      nameIn.setAttribute('aria-label', 'Player name');
+      nameIn.addEventListener('change', () => { p.name = nameIn.value.trim() || p.name; save(); render(); });
+      nameTd.appendChild(nameIn);
+      tr.appendChild(nameTd);
+
+      p.rounds.forEach((v, ri) => {
+        const td = document.createElement('td');
+        const sel = document.createElement('select');
+        sel.setAttribute('aria-label', `${p.name} round ${ri + 1}`);
+        const opts = [['', '–']]
+          .concat(Array.from({ length: PINS }, (_, n) => [String(n), String(n)]))
+          .concat([['/', '/ 8'], ['X', 'X 10']]);
+        sel.innerHTML = opts.map(([val, label]) =>
+          `<option value="${val}"${String(v) === val ? ' selected' : ''}>${label}</option>`).join('');
+        sel.className = v === 'X' ? 'strike' : v === '/' ? 'spare' : '';
+        sel.addEventListener('change', () => { p.rounds[ri] = sel.value; save(); render(); });
+        td.appendChild(sel);
+        tr.appendChild(td);
+      });
+
+      const totTd = document.createElement('td');
+      totTd.className = 'total';
+      totTd.textContent = t;
+      tr.appendChild(totTd);
+
+      const delTd = document.createElement('td');
+      const del = document.createElement('button');
+      del.className = 'icon'; del.type = 'button'; del.textContent = '✕';
+      del.title = `Remove ${p.name}`;
+      del.addEventListener('click', () => {
+        if (confirm(`Remove ${p.name}?`)) { state.players.splice(pi, 1); save(); render(); }
+      });
+      delTd.appendChild(del);
+      tr.appendChild(delTd);
+
+      tbody.appendChild(tr);
+    });
+
+    // Standings
+    const ranked = state.players.map(p => ({ name: p.name, t: total(p),
+      bowled: p.rounds.filter(v => v !== '').length,
+      strikes: p.rounds.filter(v => v === 'X').length,
+      spares: p.rounds.filter(v => v === '/').length }))
+      .sort((a, b) => b.t - a.t);
+    document.getElementById('standings').innerHTML = ranked.map((r, i) =>
+      `<li><span><span class="rank">${i + 1}.</span>${escapeHtml(r.name)}
+        <span class="meta">· ${r.bowled}/${ROUNDS} rounds · ${r.strikes}X · ${r.spares}/</span></span>
+        <span class="pts">${r.t}</span></li>`).join('');
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  document.getElementById('addForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = document.getElementById('playerName');
+    const name = input.value.trim();
+    if (!name) return;
+    state.players.push({ name, rounds: Array(ROUNDS).fill('') });
+    input.value = '';
+    save(); render();
+    input.focus();
+  });
+
+  document.getElementById('newGame').addEventListener('click', () => {
+    if (!confirm('Start a new game? Players stay, scores reset.')) return;
+    state.players.forEach(p => p.rounds = Array(ROUNDS).fill(''));
+    save(); render();
+  });
+
+  document.getElementById('clearAll').addEventListener('click', () => {
+    if (!confirm('Remove all players and scores?')) return;
+    state = { players: [] };
+    save(); render();
+  });
+
+  render();
+</script>
+</body>
+</html>
